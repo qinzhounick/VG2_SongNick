@@ -9,6 +9,8 @@ namespace FPS
     public class Enemy : MonoBehaviour
     {
         NavMeshAgent navAgent;
+        Animator animator;
+
         public Transform priorityTarget;
         public Transform target;
         public Transform patrolRoute;
@@ -20,6 +22,7 @@ namespace FPS
         void Start()
         {
             navAgent = GetComponent<NavMeshAgent>();
+            animator = GetComponent<Animator>();
         }
 
         // Update is called once per frame
@@ -49,11 +52,11 @@ namespace FPS
                 if(priorityTargetDistance <= chaseDistance)
                 {
                     target = priorityTarget;
-                    GetComponent<Renderer>().material.color = Color.red;
+                    //GetComponent<Renderer>().material.color = Color.red;
                 }
                 else
                 {
-                    GetComponent<Renderer>().material.color = Color.white;
+                    //GetComponent<Renderer>().material.color = Color.white;
                 }
             }
 
@@ -61,6 +64,8 @@ namespace FPS
             {
                 navAgent.SetDestination(target.position);
             }
+
+            animator.SetFloat("velocity", navAgent.velocity.magnitude);
         }
     }
 }
