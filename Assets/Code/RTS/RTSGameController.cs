@@ -8,12 +8,18 @@ namespace RTS
 {
     public class RTSGameController : MonoBehaviour
     {
-        public GameObject currentSelection;
+        public Canvas uiCanvas;
+        public RectTransform selectionBox;
+
+        float mouseDragThreshold = 3f;
+
+        public List<GameObject> currentSelection;
+        public Vector2 mouseClickStart;
 
         // Start is called before the first frame update
         void Start()
         {
-
+            currentSelection = new List<GameObject>();
         }
 
         // Update is called once per frame
@@ -22,41 +28,134 @@ namespace RTS
             Mouse mouse = Mouse.current;
             if (mouse != null)
             {
+
                 if(mouse.leftButton.wasPressedThisFrame)
                 {
-                    Ray selectionRaycast = Camera.main.ScreenPointToRay(mouse.position.ReadValue());
-                    RaycastHit[] hits = Physics.RaycastAll(selectionRaycast);
+                    mouseClickStart = mouse.position.ReadValue();
+                }
 
-                    currentSelection = null;
-                    foreach (RaycastHit hit in hits)
+                if(mouse.leftButton.isPressed)
+                {
+                    Vector2 mousePosition = mouse.position.ReadValue();
+                    if (Vector2.Distance(mouseClickStart, mousePosition) > mouseDragThreshold)
                     {
-                        if(hit.collider.GetComponent<RTSCharacterController>())
-                        {
-                            currentSelection = hit.collider.gameObject;
-                        }
+                        selectionBox.gameObject.SetActive(true);
+
+                        Vector2 boxMidpoint = Vector2.Lerp(mouseClickStart, mousePosition, 0.5f);
+                        selectionBox.anchoredPosition = boxMidpoint / uiCanvas.scaleFactor;
+
+                        Vector2 box = new Vector2(
+                            Mathf.Abs(mouseClickStart.x - mousePosition.x),
+                            Mathf.Abs(mouseClickStart.y - mousePosition.y)
+                        );
+
+                        selectionBox.sizeDelta = box / uiCanvas.scaleFactor;
                     }
                 }
 
-                if(mouse.rightButton.wasPressedThisFrame && currentSelection)
+                if(mouse.leftButton.wasReleasedThisFrame)
                 {
-                    RTSCharacterController character = currentSelection.GetComponent<RTSCharacterController>();
-                    if (character)
+                    if (selectionBox.gameObject.activeInHierarchy)
                     {
-                        Ray selectionRaycast = Camera.main.ScreenPointToRay(mouse.position.ReadValue());
-                        RaycastHit[] hits = Physics.RaycastAll(selectionRaycast);
+                        SelectWithinBox();
+                    }
+                    else
+                    {
+                        SelectUnderMouse();
+                    }
 
-                        currentSelection = null;
-                        foreach (RaycastHit hit in hits)
+
+                    selectionBox.gameObject.SetActive(false);
+
+                }
+
+                if(mouse.rightButton.wasPressedThisFrame && currentSelection.Count > 0)
+                {
+                    foreach(GameObject selection in currentSelection)
+                    {
+                        RTSCharacterController character = selection.GetComponent<RTSCharacterController>();
+                        if (character)
                         {
-                            if(hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground"))
+                            Ray selectionRaycast = Camera.main.ScreenPointToRay(mouse.position.ReadValue());
+                            RaycastHit[] hits = Physics.RaycastAll(selectionRaycast);
+
+                            foreach (RaycastHit hit in hits)
                             {
-                                character.SetDestination(hit.point);
+                                if (hit.collider.gameObject.layer != LayerMask.NameToLayer("Ground"))
+                                {
+                                    character.SetTarget(hit.collider.gameObject);
+                                    break;
+                                }
+
+                                if (hit.collider.gameObject.layer == LayerMask.NameToLayer("Ground"))
+                                {
+                                    character.SetTarget(null);
+                                    character.SetDestination(hit.point);
+                                }
+
                             }
                         }
                     }
+                    
                 }
             }
         }
+
+        void SelectUnderMouse()
+        {
+            Ray selectionRaycast = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+            RaycastHit[] hits = Physics.RaycastAll(selectionRaycast);
+
+            DeselectAll();
+            foreach(RaycastHit hit in hits)
+            {
+                if (hit.collider.GetComponent<RTSCharacterController>())
+                {
+                    currentSelection.Add(hit.collider.gameObject);
+                    hit.collider.SendMessage("Select", SendMessageOptions.DontRequireReceiver);
+                }
+            }
+        }
+
+
+        void SelectWithinBox()
+        {
+            RTSCharacterController[] characterControllers = FindObjectsOfType<RTSCharacterController>();
+
+            DeselectAll();
+            foreach(RTSCharacterController character in characterControllers)
+            {
+                Vector2 characterPosition = Camera.main.WorldToScreenPoint(character.transform.position);
+
+                characterPosition = characterPosition / uiCanvas.scaleFactor;
+
+                Rect anchoredRect = new Rect(
+                    selectionBox.anchoredPosition.x - selectionBox.sizeDelta.x / 2f,
+                    selectionBox.anchoredPosition.y - selectionBox.sizeDelta.y / 2f,
+                    selectionBox.sizeDelta.x,
+                    selectionBox.sizeDelta.y
+                );
+
+
+                if(anchoredRect.Contains(characterPosition))
+                {
+                    currentSelection.Add(character.gameObject);
+                    character.SendMessage("Select", SendMessageOptions.DontRequireReceiver);
+                }
+            }
+        }
+
+        void DeselectAll()
+        {
+            foreach(GameObject selection in currentSelection)
+            {
+                selection.SendMessage("Deselect", SendMessageOptions.DontRequireReceiver);
+            }
+
+            currentSelection.Clear();
+        }
+
     }
+
 }
 
